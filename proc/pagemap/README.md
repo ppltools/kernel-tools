@@ -4,6 +4,7 @@ Memmap is one such tool that helps to to realize this goal.
 
 ### Usage
 
+```
 memmap [-p <PID>] -s <START_ADDR> [-n <PAGE_NUM>] [-d <DEBUG_LEVEL>]
     -p: process id
     -s: start address of virtual memory
@@ -13,10 +14,14 @@ memmap [-p <PID>] -s <START_ADDR> [-n <PAGE_NUM>] [-d <DEBUG_LEVEL>]
     -h: show this help
 
 Version:v0.1
+```
 
 ### Example
 
-- ./memmap -p 11665 -s 0xc000000000 -e 0xc028000000
+- statistc how much virtual memory is resident in physical memory
+	- ./memmap -p 11665 -s 0xc000000000 -e 0xc028000000
+- generate commands to dump content in physical memory
+	- sh ./memdump 11665 1024
 
 ### Usage Scenario
 
