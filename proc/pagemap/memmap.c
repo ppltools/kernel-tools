@@ -18,6 +18,12 @@ int g_page_num;
 int g_debug_level;
 int g_pagemap_fd;
 
+enum {
+    DEBUG_LEVEL_NONE,       /* no debug info */
+    DEBUG_LEVEL_STATISTICS, /* print statistics debug info */
+    DEBUG_LEVEL_DETAIL,     /* print detailed debug info */
+};
+
 int init(int pid) {
     char filename_buf[20];
     sprintf(filename_buf, "/proc/%d/pagemap", pid);
@@ -69,19 +75,19 @@ int parse_one_page(int pid, uint64_t start_addr, uint64_t page_num) {
         printf("process error: %d\n", errno);
         break;
     case 0:
-        if (g_debug_level > 0)
+        if (g_debug_level >= DEBUG_LEVEL_DETAIL)
             printf("virtual_addr 0x%lx has no corresponding physical memory\n", target_addr);
         break;
     case 1:
-        if (g_debug_level > 1)
-            printf("pid=%d, virtual_page_addr=0x%lx, physical_page_addr=0x%lx\n", pid, target_addr, phy_addr);
+        if (g_debug_level >= DEBUG_LEVEL_DETAIL)
+            printf("virtual_addr 0x%lx corresponds to physical_addr 0x%lx\n", target_addr, phy_addr);
         break;
     }
     return ret;
 }
 
 static void usage(void) {
-    fprintf(stderr, "memmap [-p <PID>] [-s <START_ADDR>] [-n <PAGE_NUM>] [-d <DEBUG_LEVEL>]\n");
+    fprintf(stderr, "memmap [-p <PID>] -s <START_ADDR> [-n <PAGE_NUM>] [-d <DEBUG_LEVEL>]\n");
     fprintf(stderr, "    -p: process id\n");
     fprintf(stderr, "    -s: start address of virtual memory\n");
     fprintf(stderr, "    -e: end address of virtual memory\n");
@@ -107,11 +113,11 @@ static int parse_arg(int argc, char **argv) {
                 return -1;
             break;
         case 's':
-            if (1 != sscanf(optarg, "0x%16lx", &g_start_addr))
+            if (1 != sscanf(optarg, "0x%lx", &g_start_addr))
                 return -1;
             break;
         case 'e':
-            if (1 != sscanf(optarg, "0x%16lx", &g_end_addr))
+            if (1 != sscanf(optarg, "0x%lx", &g_end_addr))
                 return -1;
             break;
         case 'n':
@@ -143,20 +149,22 @@ int main(int argc, char **argv) {
     if (parse_arg(argc, argv))
         return -1;
 
+    int i = 0;
+    int ret;
+    int page_size = getpagesize();
+    uint64_t pos = 0;
+    uint64_t last_in_phy_mem_addr = 0;
+    int not_in_phy_mem_cnt = 0;
+    int in_phy_mem_cnt = 0;
+
     if (g_page_num == 0 && g_end_addr == 0)
         return -1;
     if (g_start_addr == 0)
         return -1;
     if (g_end_addr == 0)
-        g_end_addr = g_start_addr + getpagesize() * g_page_num;
+        g_end_addr = g_start_addr + page_size * g_page_num;
     if (g_pid == 0)
         g_pid = getpid();
-
-    int i = 0;
-    uint64_t pos = 0;
-    int page_size = getpagesize();
-    int ret;
-    int not_in_phy_mem_cnt = 0, in_phy_mem_cnt = 0;
 
     if (init(g_pid) != 0) {
         return -1;
@@ -165,11 +173,21 @@ int main(int argc, char **argv) {
     for (i = 0, pos = g_start_addr; pos < g_end_addr; i++, pos += page_size) {
         ret = parse_one_page(g_pid, g_start_addr, i);
         switch (ret) {
+        case -1:
+            break;
         case 0:
             not_in_phy_mem_cnt++;
+            if (last_in_phy_mem_addr != 0) {
+                if (g_debug_level >= DEBUG_LEVEL_STATISTICS)
+                    printf("pages in memory: pid=%d start_addr=0x%lx end_addr=0x%lx page_count=%d\n", g_pid, last_in_phy_mem_addr, pos, (pos - last_in_phy_mem_addr) / page_size);
+                last_in_phy_mem_addr = 0;
+            }
             break;
         case 1:
             in_phy_mem_cnt++;
+            if (last_in_phy_mem_addr == 0) {
+                last_in_phy_mem_addr = pos;
+            }
             break;
         }
     }
